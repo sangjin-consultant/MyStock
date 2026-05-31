@@ -1,0 +1,28 @@
+{
+  "settings": {
+    "check_interval_seconds": 10,
+    "alert_cooldown_minutes": 30,
+    "price_change_threshold_pct": 2.0,
+    "volume_spike_multiplier": 3.0,
+    "use_realtime_websocket": true,
+    "is_mock": false
+  },
+  "watchlist": [
+    {
+      "ticker": "035420",
+      "name": "NAVER",
+      "target_price": 200000,
+      "stop_loss_price": null
+    },
+    {
+      "ticker": "051910",
+      "name": "LG화학",
+      "target_price": null,
+      "stop_loss_price": null
+    }
+  ],
+  "alert_rules": {
+    "profit_thresholds": [10, 20, 30],
+    "loss_thresholds": [-10, -20, -30]
+  }
+}
