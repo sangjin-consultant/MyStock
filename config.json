@@ -9,14 +9,26 @@
   },
   "watchlist": [
     {
-      "ticker": "035420",
-      "name": "NAVER",
-      "target_price": 200000,
+      "ticker": "017670",
+      "name": "SK텔레콤",
+      "target_price": null,
       "stop_loss_price": null
     },
     {
-      "ticker": "051910",
-      "name": "LG화학",
+      "ticker": "353200",
+      "name": "대덕전자",
+      "target_price": null,
+      "stop_loss_price": null
+    },
+    {
+      "ticker": "468380",
+      "name": "SOL AI반도체TOP2플러스",
+      "target_price": null,
+      "stop_loss_price": null
+    },
+    {
+      "ticker": "035420",
+      "name": "NAVER",
       "target_price": null,
       "stop_loss_price": null
     }
