@@ -1,0 +1,42 @@
+name: Stock Monitor (08:00~14:00 KST)
+
+on:
+  schedule:
+    # 매일 23:00 UTC = 08:00 KST (월~금)
+    - cron: '0 23 * * 0-4'
+  workflow_dispatch:   # 수동 실행 버튼
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360   # 6시간 (GitHub Actions 최대)
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 패키지 설치
+        run: pip install -r requirements.txt
+
+      - name: .env 파일 생성
+        run: |
+          cat << 'EOF' > .env
+          KIS_APP_KEY=${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET=${{ secrets.KIS_APP_SECRET }}
+          KIS_ACCOUNT_NO=${{ secrets.KIS_ACCOUNT_NO }}
+          KIS_ACCOUNT_SUFFIX=${{ secrets.KIS_ACCOUNT_SUFFIX }}
+          KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}
+          KAKAO_CLIENT_SECRET=${{ secrets.KAKAO_CLIENT_SECRET }}
+          EOF
+
+      - name: 카카오 토큰 파일 생성
+        run: echo '${{ secrets.KAKAO_TOKEN_JSON }}' > .kakao_token.json
+
+      - name: 주식 모니터 실행
+        run: python stock_monitor.py

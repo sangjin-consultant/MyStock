@@ -8,6 +8,7 @@
 import json
 import time
 import threading
+import signal
 import sys
 import os
 import logging
@@ -550,6 +551,13 @@ def main():
         )
         poll_thread.start()
 
+        # SIGTERM 핸들러 — GitHub Actions 6시간 초과 시 마감 요약 전송
+        def _on_terminate(signum, frame):
+            log.info("종료 신호 수신 (SIGTERM) — 마감 요약 전송 후 종료")
+            stop_event.set()
+
+        signal.signal(signal.SIGTERM, _on_terminate)
+
         # 터미널 표시 (리치 없으면 그냥 대기)
         try:
             if RICH_AVAILABLE and sys.stdout.isatty():
@@ -571,22 +579,22 @@ def main():
             log.info("수동 종료")
             stop_event.set()
 
-        # 장 마감 처리
+        # 마감 처리 (자동/수동/강제 종료 공통)
         client.close_websocket()
-        log.info("=== 장 마감 ===")
+        log.info("=== 장 마감 / 모니터 종료 ===")
 
-        # 마감 카카오 요약
         if shared["portfolio"]:
             try:
                 send_close_summary(shared["portfolio"], config)
-                log.info("장 마감 카카오 요약 전송 완료")
+                log.info("마감 카카오 요약 전송 완료")
             except Exception as e:
-                log.warning(f"장 마감 요약 전송 실패: {e}")
+                log.warning(f"마감 요약 전송 실패: {e}")
 
-        # 수동 종료 시 완전 종료, 자동 종료 시 다음날 대기
-        if not stop_event.is_set():
+        # GitHub Actions 환경이면 1회만 실행 후 종료
+        if not sys.stdout.isatty():
             break
-        # 다음날 08:00까지 대기
+
+        # 로컬/서버: 다음날 08:00까지 대기 후 재시작
         secs = seconds_until_open()
         if secs > 0:
             log.info(f"다음 장까지 {secs/3600:.1f}시간 후 재시작")
