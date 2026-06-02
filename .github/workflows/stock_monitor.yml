@@ -2,15 +2,15 @@ name: Stock Monitor (08:00~14:00 KST)
 
 on:
   schedule:
-    # 08:00 KST = 23:00 UTC (일~목 → 월~금 KST)
-    - cron: '0 23 * * 0-4'
-    # 08:10 KST 보조 트리거 (cron 지연 대비)
-    - cron: '10 23 * * 0-4'
+    # 21:00 UTC = 06:00 KST (일~목 → 월~금 KST)
+    # 프로그램이 08:00 KST까지 대기 후 모니터링 시작 → 14:00 KST까지 커버
+    # GitHub cron이 수 시간 일찍 실행돼도 대기 로직으로 정상 동작
+    - cron: '0 21 * * 0-4'
   workflow_dispatch:   # 수동 실행 버튼
 
 concurrency:
   group: stock-monitor-daily
-  cancel-in-progress: false   # 이미 실행 중이면 새 트리거 무시
+  cancel-in-progress: false   # 이미 실행 중이면 새 트리거 대기
 
 jobs:
   monitor:
