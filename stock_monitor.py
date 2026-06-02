@@ -169,11 +169,11 @@ def build_kakao_body(name: str, price: int, stock_info: dict,
     # 등락률
     chg_parts = []
     if change_pct is not None:
-        chg_parts.append(f"당일 {change_pct:+.2f}%%")
+        chg_parts.append(f"당일 {change_pct:+.2f}%")
     if p1h is not None:
-        chg_parts.append(f"-1h {p1h:+.2f}%%")
+        chg_parts.append(f"-1h {p1h:+.2f}%")
     if p30m is not None:
-        chg_parts.append(f"-30m {p30m:+.2f}%%")
+        chg_parts.append(f"-30m {p30m:+.2f}%")
     if chg_parts:
         lines.append("등락: " + " | ".join(chg_parts))
 
@@ -184,7 +184,7 @@ def build_kakao_body(name: str, price: int, stock_info: dict,
         profit     = (price - avg) * qty
         profit_pct = (price - avg) / avg * 100
         emoji      = "💰" if profit >= 0 else "📉"
-        lines.append(f"수익: {emoji} {profit:+,.0f}원 ({profit_pct:+.2f}%%)")
+        lines.append(f"수익: {emoji} {profit:+,.0f}원 ({profit_pct:+.2f}%)")
 
     # 투자자 동향
     inv_str = fmt_investor_kakao(inv)
@@ -220,7 +220,7 @@ def check_alerts(ticker: str, name: str, price: int, volume: int,
         if abs(delta) >= threshold_pct:
             direction = "▲" if delta > 0 else "▼"
             fire_alert(state, f"{ticker}_chg_{now5m}",
-                       f"가격 변동 {direction} {delta:+.2f}%%", body(), cooldown)
+                       f"가격 변동 {direction} {delta:+.2f}%", body(), cooldown)
 
     # 목표가
     target = stock_info.get("target_price")
@@ -243,11 +243,11 @@ def check_alerts(ticker: str, name: str, price: int, volume: int,
         for t in rules.get("profit_thresholds", [10, 20, 30]):
             if prev_pnl < t <= cur_pnl:
                 fire_alert(state, f"{ticker}_profit_{t}",
-                           f"수익률 +{t}%% 돌파 💰", body(), cooldown * 4)
+                           f"수익률 +{t}% 돌파 💰", body(), cooldown * 4)
         for t in rules.get("loss_thresholds", [-10, -20, -30]):
             if prev_pnl > t >= cur_pnl:
                 fire_alert(state, f"{ticker}_loss_{t}",
-                           f"손실률 {t}%% 돌파 📉", body(), cooldown * 4)
+                           f"손실률 {t}% 돌파 📉", body(), cooldown * 4)
 
     # 거래량 급증
     spike = settings["volume_spike_multiplier"]
@@ -310,7 +310,7 @@ def send_close_summary(portfolio: list[dict], config: dict):
         pnl_arrow = "💰" if pnl >= 0 else "📉"
         lines.append(
             f"{pnl_arrow} {s['name']}\n"
-            f"   종가 {price:,} ({day_arrow}{chg:+.2f}%%) | 손익 {pnl:+,.0f}원 ({pct:+.1f}%%)"
+            f"   종가 {price:,} ({day_arrow}{chg:+.2f}%) | 손익 {pnl:+,.0f}원 ({pct:+.1f}%)"
         )
 
     chunks = [lines[i:i+5] for i in range(0, len(lines), 5)]
@@ -423,7 +423,7 @@ def fmt_pct(val: Optional[float]) -> str:
     if val is None:
         return "[dim]·[/dim]"
     s = "green" if val >= 0 else "red"
-    return f"[{s}]{val:+.2f}%%[/{s}]"
+    return f"[{s}]{val:+.2f}%[/{s}]"
 
 
 def build_display(portfolio, watchlist_prices, watchlist_cfg, state) -> object:
@@ -440,9 +440,9 @@ def build_display(portfolio, watchlist_prices, watchlist_cfg, state) -> object:
     t.add_column("",       min_width=2, max_width=2, no_wrap=True)
     t.add_column("종목명", min_width=12, ratio=3, no_wrap=True, style="bold")
     t.add_column("현재가", min_width=10, max_width=14, no_wrap=True, justify="right")
-    t.add_column("등락%%", min_width=7, max_width=9,  no_wrap=True, justify="right")
-    t.add_column("-1h%%",  min_width=7, max_width=9,  no_wrap=True, justify="right")
-    t.add_column("-30m%%", min_width=7, max_width=9,  no_wrap=True, justify="right")
+    t.add_column("등락%", min_width=7, max_width=9,  no_wrap=True, justify="right")
+    t.add_column("-1h%",  min_width=7, max_width=9,  no_wrap=True, justify="right")
+    t.add_column("-30m%", min_width=7, max_width=9,  no_wrap=True, justify="right")
     t.add_column("수익률", min_width=9, max_width=12, no_wrap=True, justify="right")
     t.add_column("평가손익", min_width=10, max_width=14, no_wrap=True, justify="right")
 
@@ -459,7 +459,7 @@ def build_display(portfolio, watchlist_prices, watchlist_cfg, state) -> object:
                   fmt_pct(s.get("change_pct")),
                   fmt_pct(pct_change(price, get_past_price(state, ticker, 60))),
                   fmt_pct(pct_change(price, get_past_price(state, ticker, 30))),
-                  f"[{ps}]{pp:+.2f}%%[/{ps}]",
+                  f"[{ps}]{pp:+.2f}%[/{ps}]",
                   f"[{ps}]{pl:+,}[/{ps}]")
 
     if portfolio:
