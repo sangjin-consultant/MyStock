@@ -9,9 +9,12 @@
 import os
 import json
 import time
+import logging
 import requests
 import websocket
 import threading
+
+log = logging.getLogger("monitor")
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Callable
@@ -105,14 +108,26 @@ class KISClient:
             h.update(extra)
         return h
 
-    def _get(self, path: str, tr_id: str, params: dict) -> dict:
+    def _get(self, path: str, tr_id: str, params: dict, retries: int = 3) -> dict:
+        """500 오류 시 최대 retries 회 재시도 (지수 백오프)"""
         url = f"{self.base_url}{path}"
-        res = requests.get(url, headers=self._headers(tr_id), params=params, timeout=10)
-        res.raise_for_status()
-        data = res.json()
-        if data.get("rt_cd") != "0":
-            raise RuntimeError(f"KIS API 오류: {data.get('msg1', data)}")
-        return data
+        last_err = None
+        for attempt in range(retries):
+            try:
+                res = requests.get(url, headers=self._headers(tr_id), params=params, timeout=10)
+                if res.status_code == 500 and attempt < retries - 1:
+                    time.sleep(2 ** attempt)   # 1, 2, 4초 대기
+                    continue
+                res.raise_for_status()
+                data = res.json()
+                if data.get("rt_cd") != "0":
+                    raise RuntimeError(f"KIS API 오류: {data.get('msg1', data)}")
+                return data
+            except requests.exceptions.HTTPError as e:
+                last_err = e
+                if attempt < retries - 1:
+                    time.sleep(2 ** attempt)
+        raise last_err
 
     # ─── 국내 주식 현재가 ────────────────────────────────────
 
@@ -278,22 +293,39 @@ class KISClient:
             except Exception:
                 pass
 
+        self._ws_stop = False
+
         def on_error(ws, error):
-            pass
+            log.warning(f"WebSocket 오류: {error}")
 
         def on_close(ws, *args):
-            pass
+            if not self._ws_stop:
+                log.warning("WebSocket 끊김 — 10초 후 재연결 시도")
 
-        self._ws = websocket.WebSocketApp(
-            self.ws_url,
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close,
-        )
-        self._ws_thread = threading.Thread(target=self._ws.run_forever, daemon=True)
+        def run_with_reconnect():
+            delay = 10
+            while not self._ws_stop:
+                try:
+                    self._ws = websocket.WebSocketApp(
+                        self.ws_url,
+                        on_open=on_open,
+                        on_message=on_message,
+                        on_error=on_error,
+                        on_close=on_close,
+                    )
+                    self._ws.run_forever(ping_interval=30, ping_timeout=10)
+                except Exception as e:
+                    log.warning(f"WebSocket 예외: {e}")
+                if self._ws_stop:
+                    break
+                log.info(f"WebSocket {delay}초 후 재연결...")
+                time.sleep(delay)
+                delay = min(delay * 2, 120)  # 최대 2분 간격
+
+        self._ws_thread = threading.Thread(target=run_with_reconnect, daemon=True)
         self._ws_thread.start()
 
     def close_websocket(self):
+        self._ws_stop = True
         if self._ws:
             self._ws.close()
