@@ -1,19 +1,9 @@
 name: Stock Monitor (08:00~14:00 KST)
 
 on:
-  schedule:
-    # GitHub Actions cron은 수 시간~하루 지연될 수 있음 (무료 계정 특성)
-    # 한국 장 시간(08:00~18:00 KST = 23:00~09:00 UTC) 전체를 1시간 간격으로 커버
-    # 장 시간에 실행된 cron만 모니터링 수행; 나머지는 20초 내 자동 종료
-    - cron: '0 23 * * 0-4'   # 08:00 KST (월~금)
-    - cron: '0 0 * * 1-5'    # 09:00 KST
-    - cron: '0 1 * * 1-5'    # 10:00 KST
-    - cron: '0 2 * * 1-5'    # 11:00 KST
-    - cron: '0 3 * * 1-5'    # 12:00 KST
-    - cron: '0 4 * * 1-5'    # 13:00 KST
-    - cron: '0 5 * * 1-5'    # 14:00 KST
-    - cron: '0 6 * * 1-5'    # 15:00 KST
-  workflow_dispatch:   # 수동 실행 버튼
+  # cron-job.org가 매일 08:00 KST (월~금)에 GitHub API로 트리거
+  # POST https://api.github.com/repos/sangjin-consultant/MyStock/actions/workflows/stock_monitor.yml/dispatches
+  workflow_dispatch:
 
 concurrency:
   group: stock-monitor-daily

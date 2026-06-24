@@ -505,20 +505,6 @@ def main():
         return
 
     # ── 장 시작 대기 ──────────────────────────────────────────
-    # GitHub Actions 환경(비-tty): 장 시간이 아니고 2시간 이내에 열리지 않으면 즉시 종료
-    # 다중 cron 트리거 중 장 시간에 실행된 것만 모니터링 수행
-    if not sys.stdout.isatty():
-        from market_schedule import now_kst, MARKET_CLOSE, is_market_open as _mopen
-        from datetime import datetime as _dt
-        _now = now_kst()
-        _secs_to_open = seconds_until_open()
-        _today_close = _dt.combine(_now.date(), MARKET_CLOSE, tzinfo=_now.tzinfo)
-        if _now > _today_close:
-            log.info(f"오늘 장이 이미 마감됐습니다 ({_now.strftime('%H:%M')} KST). 종료.")
-            return
-        if _secs_to_open > 2 * 3600:
-            log.info(f"장 시작까지 {_secs_to_open/3600:.1f}시간 대기 필요 — 이 cron은 건너뜁니다. 종료.")
-            return
     wait_for_market_open(log.info)
 
     while True:   # 하루 단위 루프 (다음날 재시작 대비)
