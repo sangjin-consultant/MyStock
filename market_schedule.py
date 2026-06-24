@@ -20,14 +20,14 @@ def now_kst() -> datetime:
 # ─── 세션 정의 (KST) ────────────────────────────────────────
 
 SESSIONS = {
-    "pre":       (time(8,  0), time(9,  0),  "프리장"),
-    "regular":   (time(9,  0), time(15, 30), "정규장"),
-    "after1":    (time(15, 40), time(16, 0), "시간외종가"),
-    "after2":    (time(16,  0), time(18, 0), "시간외단일가"),
+    "nxt_pre":   (time(8,  0),  time(8,  50), "NXT프리마켓"),
+    "single":    (time(8,  50), time(9,   0), "단일가매매"),
+    "regular":   (time(9,  0),  time(15, 20), "메인마켓"),
+    "after":     (time(15, 30), time(20,  0), "NXT애프터마켓"),
 }
 
-MARKET_OPEN  = time(8,  0)   # 프리장 시작
-MARKET_CLOSE = time(18, 0)   # 시간외 종료
+MARKET_OPEN  = time(8,  0)   # NXT 프리마켓 시작
+MARKET_CLOSE = time(20, 0)   # NXT 애프터마켓 종료
 
 
 def current_session(now: datetime = None) -> tuple[str, str] | tuple[None, None]:
