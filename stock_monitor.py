@@ -325,12 +325,17 @@ def polling_loop(client: KISClient, config: dict, state: AlertState,
                  shared: dict, stop_event: threading.Event):
     interval = config["settings"]["check_interval_seconds"]
 
+    market_was_open = False
+
     while not stop_event.is_set():
-        # 장 마감 체크
-        if not is_market_open():
+        # 장이 한 번이라도 열렸다가 닫히면 종료 (시작 시 장외는 허용)
+        currently_open = is_market_open()
+        if market_was_open and not currently_open:
             log.info("장 마감 — 모니터링 종료")
             stop_event.set()
             break
+        if currently_open:
+            market_was_open = True
 
         # 보유종목 조회
         try:
