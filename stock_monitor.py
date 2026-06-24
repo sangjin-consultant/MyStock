@@ -504,101 +504,83 @@ def main():
         log.error(f"API 연결 오류: {e}")
         return
 
-    # ── 장 시작 대기 ──────────────────────────────────────────
-    wait_for_market_open(log.info)
+    # ── 즉시 시작 (cron-job.org가 08:00 / 14:00 KST에 정확히 트리거) ──
+    log.info(f"=== 모니터 시작 [{session_label()}] ===")
 
-    while True:   # 하루 단위 루프 (다음날 재시작 대비)
-        if not is_market_open():
-            secs = seconds_until_open()
-            log.info(f"다음 장까지 {secs/3600:.1f}시간 대기")
-            time.sleep(max(secs - 60, 60))
-            continue
+    state  = AlertState()
+    shared = {"portfolio": [], "watchlist_prices": {}}
+    stop_event = threading.Event()
 
-        state  = AlertState()
-        shared = {"portfolio": [], "watchlist_prices": {}}
-        stop_event = threading.Event()
+    # 보유종목 초기 로드
+    try:
+        shared["portfolio"] = client.get_portfolio()
+        log.info(f"보유종목 {len(shared['portfolio'])}개 로드")
+    except Exception as e:
+        log.warning(f"보유종목 로드 실패: {e}")
 
-        log.info(f"=== 장 시작 [{session_label()}] ===")
-
-        # 보유종목 초기 로드
+    # 장 시작 카카오 요약
+    if shared["portfolio"]:
         try:
-            shared["portfolio"] = client.get_portfolio()
-            log.info(f"보유종목 {len(shared['portfolio'])}개 로드")
+            send_open_summary(shared["portfolio"], config)
+            log.info("장 시작 카카오 요약 전송 완료")
         except Exception as e:
-            log.warning(f"보유종목 로드 실패: {e}")
+            log.warning(f"장 시작 요약 전송 실패: {e}")
 
-        # 장 시작 카카오 요약
-        if shared["portfolio"]:
-            try:
-                send_open_summary(shared["portfolio"], config)
-                log.info("장 시작 카카오 요약 전송 완료")
-            except Exception as e:
-                log.warning(f"장 시작 요약 전송 실패: {e}")
-
-        # WebSocket 실시간 구독
-        if config["settings"].get("use_realtime_websocket", True):
-            try:
-                realtime_loop(client, config, state, shared)
-                log.info("WebSocket 연결됨")
-            except Exception as e:
-                log.warning(f"WebSocket 실패: {e}")
-
-        # REST 폴링 스레드
-        poll_thread = threading.Thread(
-            target=polling_loop,
-            args=(client, config, state, shared, stop_event),
-            daemon=True,
-        )
-        poll_thread.start()
-
-        # SIGTERM 핸들러 — GitHub Actions 6시간 초과 시 마감 요약 전송
-        def _on_terminate(signum, frame):
-            log.info("종료 신호 수신 (SIGTERM) — 마감 요약 전송 후 종료")
-            stop_event.set()
-
-        signal.signal(signal.SIGTERM, _on_terminate)
-
-        # 터미널 표시 (리치 없으면 그냥 대기)
+    # WebSocket 실시간 구독
+    if config["settings"].get("use_realtime_websocket", True):
         try:
-            if RICH_AVAILABLE and sys.stdout.isatty():
-                with Live(console=console, refresh_per_second=1) as live:
-                    while not stop_event.is_set():
-                        disp = build_display(
-                            shared["portfolio"],
-                            shared.get("watchlist_prices", {}),
-                            config.get("watchlist", []),
-                            state,
-                        )
-                        if disp:
-                            live.update(disp)
-                        time.sleep(1)
-            else:
+            realtime_loop(client, config, state, shared)
+            log.info("WebSocket 연결됨")
+        except Exception as e:
+            log.warning(f"WebSocket 실패: {e}")
+
+    # REST 폴링 스레드
+    poll_thread = threading.Thread(
+        target=polling_loop,
+        args=(client, config, state, shared, stop_event),
+        daemon=True,
+    )
+    poll_thread.start()
+
+    # SIGTERM 핸들러 — GitHub Actions 6시간 초과 시 마감 요약 전송
+    def _on_terminate(signum, frame):
+        log.info("종료 신호 수신 (SIGTERM) — 마감 요약 전송 후 종료")
+        stop_event.set()
+
+    signal.signal(signal.SIGTERM, _on_terminate)
+
+    # 터미널 표시 (리치 없으면 그냥 대기)
+    try:
+        if RICH_AVAILABLE and sys.stdout.isatty():
+            with Live(console=console, refresh_per_second=1) as live:
                 while not stop_event.is_set():
-                    time.sleep(30)
-        except KeyboardInterrupt:
-            log.info("수동 종료")
-            stop_event.set()
+                    disp = build_display(
+                        shared["portfolio"],
+                        shared.get("watchlist_prices", {}),
+                        config.get("watchlist", []),
+                        state,
+                    )
+                    if disp:
+                        live.update(disp)
+                    time.sleep(1)
+        else:
+            while not stop_event.is_set():
+                time.sleep(30)
+    except KeyboardInterrupt:
+        log.info("수동 종료")
+        stop_event.set()
 
-        # 마감 처리 (자동/수동/강제 종료 공통)
-        client.close_websocket()
-        log.info("=== 장 마감 / 모니터 종료 ===")
+    # 마감 처리
+    client.close_websocket()
+    log.info("=== 모니터 종료 ===")
 
-        if shared["portfolio"]:
-            try:
-                send_close_summary(shared["portfolio"], config)
-                log.info("마감 카카오 요약 전송 완료")
-            except Exception as e:
-                log.warning(f"마감 요약 전송 실패: {e}")
+    if shared["portfolio"]:
+        try:
+            send_close_summary(shared["portfolio"], config)
+            log.info("마감 카카오 요약 전송 완료")
+        except Exception as e:
+            log.warning(f"마감 요약 전송 실패: {e}")
 
-        # GitHub Actions 환경이면 1회만 실행 후 종료
-        if not sys.stdout.isatty():
-            break
-
-        # 로컬/서버: 다음날 08:00까지 대기 후 재시작
-        secs = seconds_until_open()
-        if secs > 0:
-            log.info(f"다음 장까지 {secs/3600:.1f}시간 후 재시작")
-            time.sleep(max(secs - 120, 60))
 
 
 if __name__ == "__main__":
