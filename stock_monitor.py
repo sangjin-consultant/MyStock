@@ -505,21 +505,19 @@ def main():
         return
 
     # ── 장 시작 대기 ──────────────────────────────────────────
-    # GitHub Actions 환경(비-tty)에서 대기 시간이 너무 길면 (>4시간) 즉시 종료
-    # 오늘 장이 이미 끝났거나 다음날까지 대기해야 하는 경우 — 내일 cron이 재시작함
+    # GitHub Actions 환경(비-tty): 장 시간이 아니고 2시간 이내에 열리지 않으면 즉시 종료
+    # 다중 cron 트리거 중 장 시간에 실행된 것만 모니터링 수행
     if not sys.stdout.isatty():
-        secs_to_open = seconds_until_open()
-        if secs_to_open > 4 * 3600:
-            from market_schedule import now_kst, MARKET_CLOSE
-            from datetime import datetime, time as dtime
-            now = now_kst()
-            today_close = datetime.combine(now.date(), MARKET_CLOSE, tzinfo=now.tzinfo)
-            if now > today_close:
-                log.info(f"오늘 장이 이미 마감됐습니다 ({now.strftime('%H:%M')} KST). "
-                         f"다음 cron 실행 시 재시작됩니다. 종료.")
-            else:
-                log.info(f"장 시작까지 {secs_to_open/3600:.1f}시간 대기 필요 — "
-                         f"6시간 제한 초과 예상. 다음 cron 실행 시 재시작됩니다. 종료.")
+        from market_schedule import now_kst, MARKET_CLOSE, is_market_open as _mopen
+        from datetime import datetime as _dt
+        _now = now_kst()
+        _secs_to_open = seconds_until_open()
+        _today_close = _dt.combine(_now.date(), MARKET_CLOSE, tzinfo=_now.tzinfo)
+        if _now > _today_close:
+            log.info(f"오늘 장이 이미 마감됐습니다 ({_now.strftime('%H:%M')} KST). 종료.")
+            return
+        if _secs_to_open > 2 * 3600:
+            log.info(f"장 시작까지 {_secs_to_open/3600:.1f}시간 대기 필요 — 이 cron은 건너뜁니다. 종료.")
             return
     wait_for_market_open(log.info)
 
