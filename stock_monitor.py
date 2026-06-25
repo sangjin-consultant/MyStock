@@ -384,6 +384,23 @@ def check_close_betting(price: int, item: dict, state: AlertState):
             f"현재가: {price:,}원\n매수가: {buy:,}원\n손익: {profit_str}"
         )
 
+    # 만기일 당일 15:00 KST — 장 마감 20분 전 매도 알림
+    expiry = item.get("만기일")
+    if expiry:
+        from market_schedule import now_kst
+        now = now_kst()
+        from datetime import date as _date, time as _time
+        try:
+            exp_date = _date.fromisoformat(expiry)
+            if now.date() == exp_date and now.time() >= _time(15, 0):
+                _alert(
+                    f"bet_expiry_{ticker}",
+                    f"⏰ {name} 만기일 — 장 마감 전 매도 필요",
+                    f"만기일: {expiry}\n현재가: {price:,}원\n매수가: {buy:,}원\n손익: {profit_str}\n\n15:20 메인마켓 마감 전에 매도하세요!",
+                )
+        except ValueError:
+            log.warning(f"종가배팅 만기일 형식 오류: {expiry} (YYYY-MM-DD 형식으로 입력하세요)")
+
 
 # ─── 폴링 루프 ──────────────────────────────────────────────
 
