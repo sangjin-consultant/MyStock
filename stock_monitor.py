@@ -343,13 +343,23 @@ def load_close_betting(portfolio: list[dict], watchlist: list[dict]) -> list[dic
     return result
 
 
+def _parse_price(val) -> Optional[int]:
+    """천단위 구분자(쉼표) 포함 문자열 또는 숫자를 int로 변환"""
+    if val is None:
+        return None
+    try:
+        return int(str(val).replace(",", "").strip())
+    except (ValueError, TypeError):
+        return None
+
+
 def check_close_betting(price: int, item: dict, state: AlertState):
     """익절가/물타기가 도달 시 카카오톡 알림"""
     ticker   = item["ticker"]
     name     = item.get("name", ticker)
-    buy      = item.get("buy_price", 0)
-    target   = item.get("익절가")
-    avg_down = item.get("물타기가")
+    buy      = _parse_price(item.get("buy_price")) or 0
+    target   = _parse_price(item.get("익절가"))
+    avg_down = _parse_price(item.get("물타기가"))
 
     def _alert(key, title, msg):
         cooldown = 60 * 60  # 1시간 쿨다운
