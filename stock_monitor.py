@@ -373,26 +373,30 @@ def check_close_betting(price: int, item: dict, state: AlertState):
         except Exception as e:
             log.warning(f"카카오 전송 실패: {e}")
 
-    if buy:
-        diff     = price - buy
-        diff_pct = diff / buy * 100
-        profit_str = f"{'📈' if diff >= 0 else '📉'} {diff:+,}원 ({diff_pct:+.2f}%)"
-    else:
-        profit_str = ""
+    qty = int(item.get("수량", 0))
+
+    def _profit_str(cur_price):
+        if not buy:
+            return ""
+        diff      = cur_price - buy
+        diff_pct  = diff / buy * 100
+        icon      = "📈" if diff >= 0 else "📉"
+        per_share = f"주당: {diff:+,}원 ({diff_pct:+.2f}%)"
+        total     = f"합계: {diff * qty:+,}원" if qty else ""
+        return f"{icon} {per_share}" + (f"\n   {total}" if total else "")
+
+    def _body(cur_price):
+        lines = [f"현재가: {cur_price:,}원", f"매수가: {buy:,}원"]
+        if qty:
+            lines.append(f"수량:   {qty:,}주")
+        lines.append(f"손익:   {_profit_str(cur_price)}")
+        return "\n".join(lines)
 
     if target and price >= target:
-        _alert(
-            f"bet_target_{ticker}",
-            f"🎯 {name} 익절가 도달",
-            f"현재가: {price:,}원\n매수가: {buy:,}원\n손익: {profit_str}"
-        )
+        _alert(f"bet_target_{ticker}", f"🎯 {name} 익절가 도달", _body(price))
 
     if avg_down and price <= avg_down:
-        _alert(
-            f"bet_avgdown_{ticker}",
-            f"📉 {name} 물타기 구간",
-            f"현재가: {price:,}원\n매수가: {buy:,}원\n손익: {profit_str}"
-        )
+        _alert(f"bet_avgdown_{ticker}", f"📉 {name} 물타기 구간", _body(price))
 
     # 만기일 당일 15:00 KST — 장 마감 20분 전 매도 알림
     expiry = item.get("만기일")
@@ -406,7 +410,7 @@ def check_close_betting(price: int, item: dict, state: AlertState):
                 _alert(
                     f"bet_expiry_{ticker}",
                     f"⏰ {name} 만기일 — 장 마감 전 매도 필요",
-                    f"만기일: {expiry}\n현재가: {price:,}원\n매수가: {buy:,}원\n손익: {profit_str}\n\n15:20 메인마켓 마감 전에 매도하세요!",
+                    f"만기일: {expiry}\n{_body(price)}\n\n15:20 메인마켓 마감 전에 매도하세요!",
                 )
         except ValueError:
             log.warning(f"종가배팅 만기일 형식 오류: {expiry} (YYYY-MM-DD 형식으로 입력하세요)")
@@ -507,12 +511,17 @@ def polling_loop(client: KISClient, config: dict, state: AlertState,
                 if price is None:
                     continue
                 buy  = _parse_price(bet.get("buy_price")) or 0
+                qty  = int(bet.get("수량", 0))
                 name = bet.get("name", bet["ticker"])
                 if buy:
                     diff     = price - buy
                     diff_pct = diff / buy * 100
-                    icon = "📈" if diff >= 0 else "📉"
-                    lines.append(f"{icon} {name}\n   현재가: {price:,}원 | 매수가: {buy:,}원\n   손익: {diff:+,}원 ({diff_pct:+.2f}%)")
+                    icon     = "📈" if diff >= 0 else "📉"
+                    line     = f"{icon} {name}\n   현재가: {price:,}원 | 매수가: {buy:,}원"
+                    line    += f"\n   주당: {diff:+,}원 ({diff_pct:+.2f}%)"
+                    if qty:
+                        line += f"\n   합계: {diff * qty:+,}원 ({qty:,}주)"
+                    lines.append(line)
                 else:
                     lines.append(f"• {name}: {price:,}원")
             if lines:
