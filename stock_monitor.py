@@ -68,8 +68,9 @@ from market_schedule import (
     session_label, wait_for_market_open, MARKET_OPEN, MARKET_CLOSE,
 )
 
-CONFIG_PATH    = Path(__file__).parent / "config.json"
-ALERT_LOG_PATH = Path(__file__).parent / "alerts.log"
+CONFIG_PATH       = Path(__file__).parent / "config.json"
+CLOSE_BETTING_PATH = Path(__file__).parent / "close_betting.json"
+ALERT_LOG_PATH    = Path(__file__).parent / "alerts.log"
 
 
 # ─── 상태 관리 ──────────────────────────────────────────────
@@ -319,13 +320,80 @@ def send_close_summary(portfolio: list[dict], config: dict):
         send_kakao(prefix, "\n\n".join(chunk))
 
 
+# ─── 종가배팅 ───────────────────────────────────────────────
+
+def load_close_betting(portfolio: list[dict], watchlist: list[dict]) -> list[dict]:
+    """close_betting.json 로드 + 종목명으로 ticker 자동 매칭"""
+    if not CLOSE_BETTING_PATH.exists():
+        return []
+    try:
+        items = json.loads(CLOSE_BETTING_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+    all_stocks = {s["name"]: s["ticker"] for s in portfolio + watchlist}
+    result = []
+    for item in items:
+        if "ticker" not in item:
+            item["ticker"] = all_stocks.get(item.get("name", ""), "")
+        if item["ticker"]:
+            result.append(item)
+        else:
+            log.warning(f"종가배팅: '{item.get('name')}' 종목 코드를 찾을 수 없습니다.")
+    return result
+
+
+def check_close_betting(price: int, item: dict, state: AlertState):
+    """익절가/물타기가 도달 시 카카오톡 알림"""
+    ticker   = item["ticker"]
+    name     = item.get("name", ticker)
+    buy      = item.get("buy_price", 0)
+    target   = item.get("익절가")
+    avg_down = item.get("물타기가")
+
+    def _alert(key, title, msg):
+        cooldown = 60 * 60  # 1시간 쿨다운
+        last = state.last_alert_time.get(key, 0)
+        if time.time() - last < cooldown:
+            return
+        state.last_alert_time[key] = time.time()
+        log.info(f"[종가배팅] {title}")
+        try:
+            send_kakao(title, msg)
+        except Exception as e:
+            log.warning(f"카카오 전송 실패: {e}")
+
+    if buy:
+        diff     = price - buy
+        diff_pct = diff / buy * 100
+        profit_str = f"{'📈' if diff >= 0 else '📉'} {diff:+,}원 ({diff_pct:+.2f}%)"
+    else:
+        profit_str = ""
+
+    if target and price >= target:
+        _alert(
+            f"bet_target_{ticker}",
+            f"🎯 {name} 익절가 도달",
+            f"현재가: {price:,}원\n매수가: {buy:,}원\n손익: {profit_str}"
+        )
+
+    if avg_down and price <= avg_down:
+        _alert(
+            f"bet_avgdown_{ticker}",
+            f"📉 {name} 물타기 구간",
+            f"현재가: {price:,}원\n매수가: {buy:,}원\n손익: {profit_str}"
+        )
+
+
 # ─── 폴링 루프 ──────────────────────────────────────────────
 
 def polling_loop(client: KISClient, config: dict, state: AlertState,
                  shared: dict, stop_event: threading.Event):
     interval = config["settings"]["check_interval_seconds"]
 
-    market_was_open = False
+    market_was_open  = False
+    close_bets       = []
+    last_bet_reload  = 0
 
     while not stop_event.is_set():
         # 장이 한 번이라도 열렸다가 닫히면 종료 (시작 시 장외는 허용)
@@ -383,6 +451,23 @@ def polling_loop(client: KISClient, config: dict, state: AlertState,
             except Exception as e:
                 log.warning(f"{ticker} 조회 오류: {e}")
         shared["watchlist_prices"] = watchlist_prices
+
+        # 종가배팅 5분마다 hot-reload + 가격 체크
+        if time.time() - last_bet_reload > 300:
+            close_bets = load_close_betting(
+                shared.get("portfolio", []),
+                config.get("watchlist", [])
+            )
+            last_bet_reload = time.time()
+            if close_bets:
+                log.info(f"종가배팅 {len(close_bets)}개 로드: {[b['name'] for b in close_bets]}")
+
+        for bet in close_bets:
+            try:
+                price = client.get_stock_price(bet["ticker"])["price"]
+                check_close_betting(price, bet, state)
+            except Exception as e:
+                log.warning(f"종가배팅 조회 오류 ({bet.get('name')}): {e}")
 
         stop_event.wait(interval)
 
