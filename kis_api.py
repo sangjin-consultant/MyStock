@@ -133,13 +133,18 @@ class KISClient:
 
     def get_stock_price(self, ticker: str) -> dict:
         """
-        국내 주식 현재가 조회
+        국내 주식 현재가 조회 (NXT 애프터마켓 시간엔 NX 코드 자동 사용)
         반환: {price, open, high, low, volume, change_pct, change_price, name}
         """
+        from market_schedule import now_kst
+        from datetime import time as _time
+        _t = now_kst().time()
+        # NXT 애프터마켓(15:30~20:00)엔 "NX" 마켓 코드로 실시간 가격 조회
+        mkt_code = "NX" if _time(15, 30) <= _t < _time(20, 0) else "J"
         data = self._get(
             "/uapi/domestic-stock/v1/quotations/inquire-price",
             tr_id="FHKST01010100",
-            params={"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": ticker},
+            params={"FID_COND_MRKT_DIV_CODE": mkt_code, "FID_INPUT_ISCD": ticker},
         )
         o = data["output"]
         return {
