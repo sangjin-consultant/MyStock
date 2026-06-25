@@ -421,6 +421,7 @@ def polling_loop(client: KISClient, config: dict, state: AlertState,
     market_was_open  = False
     close_bets       = []
     last_bet_reload  = 0
+    last_bet_report  = 0
 
     while not stop_event.is_set():
         # 장이 한 번이라도 열렸다가 닫히면 종료 (시작 시 장외는 허용)
@@ -489,12 +490,37 @@ def polling_loop(client: KISClient, config: dict, state: AlertState,
             if close_bets:
                 log.info(f"종가배팅 {len(close_bets)}개 로드: {[b['name'] for b in close_bets]}")
 
+        bet_prices = {}
         for bet in close_bets:
             try:
                 price = client.get_stock_price(bet["ticker"])["price"]
+                bet_prices[bet["ticker"]] = price
                 check_close_betting(price, bet, state)
             except Exception as e:
                 log.warning(f"종가배팅 조회 오류 ({bet.get('name')}): {e}")
+
+        # 종가배팅 1시간마다 현재 수익률 리포트
+        if close_bets and time.time() - last_bet_report > 3600:
+            lines = []
+            for bet in close_bets:
+                price = bet_prices.get(bet["ticker"])
+                if price is None:
+                    continue
+                buy  = _parse_price(bet.get("buy_price")) or 0
+                name = bet.get("name", bet["ticker"])
+                if buy:
+                    diff     = price - buy
+                    diff_pct = diff / buy * 100
+                    icon = "📈" if diff >= 0 else "📉"
+                    lines.append(f"{icon} {name}\n   현재가: {price:,}원 | 매수가: {buy:,}원\n   손익: {diff:+,}원 ({diff_pct:+.2f}%)")
+                else:
+                    lines.append(f"• {name}: {price:,}원")
+            if lines:
+                try:
+                    send_kakao("⏱ 종가배팅 1시간 리포트", "\n\n".join(lines))
+                    last_bet_report = time.time()
+                except Exception as e:
+                    log.warning(f"종가배팅 리포트 전송 실패: {e}")
 
         stop_event.wait(interval)
 
