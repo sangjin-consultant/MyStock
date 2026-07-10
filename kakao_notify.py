@@ -64,7 +64,9 @@ def get_valid_token(rest_api_key: str) -> str | None:
             token_data["refresh_token"] = refreshed["refresh_token"]
         save_token(token_data)
         return token_data["access_token"]
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.getLogger("monitor").warning(f"카카오 토큰 갱신 실패: {e} — 재인증 필요")
         return None
 
 

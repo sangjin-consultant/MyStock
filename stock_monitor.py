@@ -132,7 +132,12 @@ def fire_alert(state: AlertState, key: str, title: str, body: str, cooldown_min:
     full = f"[{title}] {body}"
     log_alert(full)
     _desktop_notify(f"🔔 {title}", body)
-    send_kakao(f"🔔 {title}", body)
+    try:
+        ok = send_kakao(f"🔔 {title}", body)
+        if not ok:
+            log.warning(f"카카오 전송 실패 (토큰 만료 또는 API 오류): {title}")
+    except Exception as e:
+        log.warning(f"카카오 전송 예외: {e}")
 
 
 def fmt_investor_kakao(inv: dict) -> str:
